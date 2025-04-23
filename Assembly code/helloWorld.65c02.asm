@@ -17,7 +17,7 @@ reset:
     lda #%11100000      ; set top 3 pins in A register to output
     sta DDRA
 
-    lda #%00111000      ;set 8-bit mode. 2-line display. 5x8 font
+    lda #%00111000      ; set 8-bit mode. 2-line display. 5x8 font
     jsr lcd_instruction
     lda #%00001110      ; Turn on display. Turn on cursor. Blink off.
     jsr lcd_instruction
@@ -28,11 +28,10 @@ reset:
 
     jsr print_str
 
-message:
-    .asciiz "Hello, World!"
-
 loop:
     jmp loop
+
+message: .asciiz "Hello, World!"
 
 lcd_wait:
     pha

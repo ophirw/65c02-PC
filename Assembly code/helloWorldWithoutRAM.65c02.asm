@@ -47,15 +47,6 @@ wait_2:
     lda #0
     sta PORTA  ; clear E pin
 
-    ldx #$ff
-wait_1:
-    ldy #$ff
-wait_2:
-    dey
-    bne wait_2
-    dex
-    bne wait_1
-
     lda #%00111000 ;set 8-bit mode. 2-line display. 5x8 font
     sta PORTB
     ; send command to LCD
