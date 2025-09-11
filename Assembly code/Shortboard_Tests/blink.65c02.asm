@@ -2,7 +2,7 @@ PORTB = $7f90
 PORTA = $7f91
 DDRB  = $7f92
 DDRA  = $7f93
-PCR $7f9c
+PCR = $7f9c
 
 
     .org $8000
@@ -44,3 +44,7 @@ _inner_loop:
     sbc #1
     bne _thrice
     rts
+
+    .org $fffc
+    .word reset
+    .word $0000
