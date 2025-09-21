@@ -6,6 +6,8 @@ PCR = $7f9c
 
 
     .org $8000
+    nop
+    .org $C000
 reset:
     lda #%00001111
     sta PCR
@@ -13,16 +15,16 @@ reset:
     lda #%11111111
     sta DDRA
 
-    lda #%11111101
+    lda #%10111111
     sta DDRB
 
 loop:
-    lda #$aa
+    lda #$ff
     sta PORTA
 
     jsr delay
 
-    lda #$55
+    lda #$00
     sta PORTA
 
     jsr delay
