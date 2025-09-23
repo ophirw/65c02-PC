@@ -16,6 +16,10 @@ E = %00000001
 RW = %00000010
 RS = %00000100
 
+IFR_SR = %00000100
+IFR_T2 = %00100000
+IFR_SET = %10000000
+
 
 ; variables
 ;---------
@@ -27,8 +31,21 @@ input_buffer = $0200
     nop
     .org $C000
 
+;TODO: 
+    ; add buffer overflow check to WRITE_BUFFER
+    ; read actual data from PS/2, not just which intrpt happened
+    ; write add_to_buffer subroutine
+    ; write code to print buffer contents to LCD
+    ; check for framing error in SR handler
+    ; check for framing error\parity in T2 handler
+    ; write framing error handler
+    ; translate scan codes to ascii
+    ; handle shift, ctrl, alt keys
+    ; send commands to keyboard (e.g. set LEDs)
+
+
 reset:
-    lda #%00011111
+    lda #%00001111
     sta PCR      ; set CA2 output, CA1 input (need to be tied high), CB1 positive going edge. CB2 controlled by SR.
     lda #%11111111
     sta DDRA     ; set all pins in A register to output
@@ -36,11 +53,12 @@ reset:
     sta DDRB     ; set all pins (except PB6, connected to PS2 clk) in B register to output
 
     jsr lcd_init
-    ;jsr ps2_init
+    jsr ps2_init
 
 
 loop:
     jmp loop
+
 
 ; Subroutines
 ;------------
@@ -79,7 +97,7 @@ _busy:
     pla
     rts
 
-; sends the LCD a packet of data in the A register, instruction/data determined by LCD_RS
+; sends the LCD an instruction from the A register
 ; Modifies: flags, A
 lcd_instruction:
     jsr lcd_wait
@@ -138,29 +156,42 @@ load_t2:
     rts
 
 ps2_init:
+    cli
     lda #%00101100
     sta ACR       ; set T2 count pulses on PB6, set SR to shift in under external clock on CB1. diasble all others
     jsr INIT_BUFFER
     jsr ps2_prepare_for_character
     lda #%01111111
     sta IER       ; disable all interrupts
-    lda #%10100100
+    lda #(IFR_SET | IFR_SR | IFR_T2)
     sta IER       ; enable interrupts on SR and T2
     rts
 
 ps2_prepare_for_character:
-    lda SR      ; clear SR counter
-    lda #10     ; set T2 to count 11 bits
+    ; ReStart SR
+	lda #$20 + $00
+    sta ACR
+	lda #$20 + $0c
+    sta ACR
+	lda SR
+    ; set T2 to count 11 bits
+    lda #10     
     jsr load_t2
     rts
-
-NMI:
-    rti
+    
 IRQ:
     pha
+    ; check if PS/2 related interrupt
     lda IFR
-    cmp #$20
-    bcs _irq_ps2_t2
+    and #(IFR_SR | IFR_T2)
+    cmp #IFR_T2
+    beq _irq_ps2_t2
+    cmp #IFR_SR
+    beq _irq_ps2_sr
+    ; if not, just return
+    lda #"?"
+    jsr CHR_OUT
+    jmp _irq_done
 _irq_ps2_sr:
     lda SR ; clear SR interrupt flag
     lda #"S"
@@ -169,12 +200,14 @@ _irq_ps2_sr:
 _irq_ps2_t2:
     bit T2CL ; clear t2 interrupt flag
     lda #"T"
-    jsr CHR_OUT
+    jsr CHR_OUT 
     jsr ps2_prepare_for_character ; reset T2 and SR counters
 _irq_done:
     pla
     rti
 
+NMI:
+    rti
 ; sys vectors
 ;-------------
     .org $fffa
