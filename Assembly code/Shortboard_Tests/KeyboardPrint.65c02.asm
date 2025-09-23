@@ -31,7 +31,7 @@ RS = %00000100
 
 reset:
     lda #%00001111
-    sta PCR      ; set CA2 output, CA1 input (need to be tiesd high), rest dont care - controlled by shift reg
+    sta PCR      ; set CA2 output, CA1 input (need to be tied high), rest dont care - controlled by shift reg
     lda #%11111111
     sta DDRA     ; set all pins in A register to output
     lda #%10111111
