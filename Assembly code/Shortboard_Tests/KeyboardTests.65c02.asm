@@ -25,6 +25,7 @@ IFR_SET = %10000000
 ;---------
 write_ptr = $0000
 read_ptr = $0001
+ps2_read_result = $0002
 input_buffer = $0200
 
     .org $8000
@@ -32,20 +33,15 @@ input_buffer = $0200
     .org $C000
 
 ;TODO: 
-    ; add buffer overflow check to WRITE_BUFFER
-    ; read actual data from PS/2, not just which intrpt happened
-    ; write add_to_buffer subroutine
-    ; write code to print buffer contents to LCD
     ; check for framing error in SR handler
     ; check for framing error\parity in T2 handler
     ; write framing error handler
-    ; translate scan codes to ascii
-    ; handle shift, ctrl, alt keys
-    ; send commands to keyboard (e.g. set LEDs)
+    ; handle shift, enter, backspace, delete keys
+    ; send commands to keyboard (e.g. reset to set as PS2, set LEDs)
 
 
 reset:
-    lda #%00001111
+    lda #%00011111
     sta PCR      ; set CA2 output, CA1 input (need to be tied high), CB1 positive going edge. CB2 controlled by SR.
     lda #%11111111
     sta DDRA     ; set all pins in A register to output
@@ -55,8 +51,14 @@ reset:
     jsr lcd_init
     jsr ps2_init
 
-
 loop:
+    sei
+    lda write_ptr
+    cmp read_ptr
+    cli
+    beq loop     ; if read_ptr == write_ptr, no new char:
+    jsr READ_BUFFER
+    jsr CHR_OUT
     jmp loop
 
 
@@ -143,9 +145,20 @@ READ_BUFFER:
 ; writes the character in the A register to the input buffer, if there is space
 ; Modifies: flags, X
 WRITE_BUFFER:
-    ldx write_ptr
+    pha
+    lda write_ptr
+    tax
+    ; check for buffer full condition
+    inc
+    cmp read_ptr        ; if next write would make buffer full, skip write
+    beq _buffer_full
+    pla
     sta input_buffer,X
     inc write_ptr
+    jmp _end_write
+_buffer_full:
+    pla
+_end_write:
     rts
 
 ; Loads timer 2 with the value in A (low byte) and 0 (high byte)
@@ -155,6 +168,8 @@ load_t2:
     stz T2CH
     rts
 
+; Initializes PS/2 interface by setting up SR and T2, enabling interrupts, and initializing buffer
+; Modifies: flags, A
 ps2_init:
     cli
     lda #%00101100
@@ -167,6 +182,8 @@ ps2_init:
     sta IER       ; enable interrupts on SR and T2
     rts
 
+; reInitializes Shift register and timer 2 to prepare for receiving a character
+; Modifies: flags, A
 ps2_prepare_for_character:
     ; ReStart SR
 	lda #$20 + $00
@@ -179,6 +196,23 @@ ps2_prepare_for_character:
     jsr load_t2
     rts
     
+; reverses bits in ps2_read_result and adds to input buffer
+; Modifies: flags, A, X
+ps2_add_to_buffer:
+    lda ps2_read_result
+    ldx #8          ; Set X to 8 (number of bits)
+    lsr             ; Shift right to start with LSB
+    sta ps2_read_result ; Store the reversed bits temporarily
+_reverse_loop:
+    rol ps2_read_result ; Rotate left into the result
+    lsr             ; Shift right to get the next bit
+    dex             ; Decrement bit counter
+    bne _reverse_loop ; Repeat until all bits are reversed
+    ldx ps2_read_result ; Load the reversed bits into X
+    lda keymap, X
+    jsr WRITE_BUFFER
+    rts
+
 IRQ:
     pha
     ; check if PS/2 related interrupt
@@ -189,25 +223,52 @@ IRQ:
     cmp #IFR_SR
     beq _irq_ps2_sr
     ; if not, just return
-    lda #"?"
-    jsr CHR_OUT
     jmp _irq_done
+
 _irq_ps2_sr:
-    lda SR ; clear SR interrupt flag
-    lda #"S"
-    jsr CHR_OUT
+    lda SR ; clear SR interrupt flag and read first 8 bits.
+    ; A register now has first 8 bits (start bit 0 (in position 7, MSB), and 7 least significant data bits (in reverse order))
+    ;lda #%00011100 ; simulate "A" key.
+    sta ps2_read_result
     jmp _irq_done
+
 _irq_ps2_t2:
-    bit T2CL ; clear t2 interrupt flag
-    lda #"T"
-    jsr CHR_OUT 
+    bit T2CL; clear t2 interrupt flag
+    lda RS  ; read next 3 bits.
+    ; A register now has last 3 bits (code MSB in position 2, parity bit in position 1, stop bit 1 in position 0)
+    ;lda #%11100001 ; simulate "A" key.
+    ror     ; rotate right 3 times to put MSB in carry bit, parity in bit 7, stop bit in bit 6
+    ror
+    ror 
+    rol ps2_read_result ; put MSB in position 0 of result byte, now contains full byte in reverse order
+    jsr ps2_add_to_buffer
     jsr ps2_prepare_for_character ; reset T2 and SR counters
+
 _irq_done:
     pla
     rti
 
 NMI:
     rti
+
+keymap:
+    .byte "??????????????`?" ; 0x00-0x0F
+    .byte "?????q1???zsaw2?" ; 0x10-0x1F
+    .byte "?cxde43?? vftr5?" ; 0x20-0x2F
+    .byte "?nbhgy6???mju78?" ; 0x30-0x3F
+    .byte "?,kio09??./l;p-?" ; 0x40-0x4F
+    .byte "??'?[=?????]?\\??" ; 0x50-0x5F
+    .byte "?????????1?47???" ; 0x60-0x6F
+    .byte "0.2568???+3-*9??" ; 0x70-0x7F
+    .byte "????????????????" ; 0x80-0x8F
+    .byte "????????????????" ; 0x90-0x9F
+    .byte "????????????????" ; 0xA0-0xAF
+    .byte "????????????????" ; 0xB0-0xBF
+    .byte "????????????????" ; 0xC0-0xCF
+    .byte "????????????????" ; 0xD0-0xDF
+    .byte "????????????????" ; 0xE0-0xEF
+    .byte "????????????????" ; 0xF0-0xFF
+
 ; sys vectors
 ;-------------
     .org $fffa
