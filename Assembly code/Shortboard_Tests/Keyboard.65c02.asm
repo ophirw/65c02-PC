@@ -33,6 +33,8 @@ input_buffer = $0200
     .org $C000
 
 ;TODO: 
+    ; ignore break codes (0xF0)
+    ; handle extended codes (0xE0)
     ; check for framing error in SR handler
     ; check for framing error\parity in T2 handler
     ; write framing error handler
