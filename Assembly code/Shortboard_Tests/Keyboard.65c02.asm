@@ -38,6 +38,7 @@ input_buffer = $0200
     ; check for framing error in SR handler
     ; check for framing error\parity in T2 handler
     ; write framing error handler
+    ; instead of reversing bits in add_to_buffer, change keymap to match bit order
     ; handle shift, enter, backspace, delete keys
     ; send commands to keyboard (e.g. reset to set as PS2, set LEDs)
 
@@ -117,6 +118,7 @@ lcd_instruction:
 ; sends the character in the A register to the LCD
 ; Modifies: flags
 CHR_OUT:
+    pha
     jsr lcd_wait
     sta PORTA
     lda #RS        ; set RS pin
@@ -125,6 +127,7 @@ CHR_OUT:
     sta PORTB
     lda #RS        ; clear E pin
     sta PORTB
+    pla
     rts
 
 ; initializes the input buffer pointers to make the buffer empty
@@ -215,6 +218,7 @@ _reverse_loop:
     jsr WRITE_BUFFER
     rts
 
+
 IRQ:
     pha
     ; check if PS/2 related interrupt
@@ -225,24 +229,41 @@ IRQ:
     cmp #IFR_SR
     beq _irq_ps2_sr
     ; if not, just return
+    
+    lda #"^"
+    jsr CHR_OUT ; debug
+
     jmp _irq_done
 
 _irq_ps2_sr:
     lda SR ; clear SR interrupt flag and read first 8 bits.
     ; A register now has first 8 bits (start bit 0 (in position 7, MSB), and 7 least significant data bits (in reverse order))
-    ;lda #%00011100 ; simulate "A" key.
+    ; HERE: check for framing error - MSB needs to be 0. use bmi instruction
     sta ps2_read_result
+
+    jsr CHR_OUT ; debug
+    lda #"S"
+    jsr CHR_OUT
+
     jmp _irq_done
 
 _irq_ps2_t2:
     bit T2CL; clear t2 interrupt flag
-    lda RS  ; read next 3 bits.
+    lda SR  ; read next 3 bits.
     ; A register now has last 3 bits (code MSB in position 2, parity bit in position 1, stop bit 1 in position 0)
-    ;lda #%11100001 ; simulate "A" key.
+    
+    jsr CHR_OUT ; debug
+    pha
+    lda #"T"
+    jsr CHR_OUT
+    pla
+
     ror     ; rotate right 3 times to put MSB in carry bit, parity in bit 7, stop bit in bit 6
+    ; HERE: check for framing error - carry bit needs to be 1. use bcc instruction
     ror
     ror 
     rol ps2_read_result ; put MSB in position 0 of result byte, now contains full byte in reverse order
+    ; HERE: check for parity - ps2_read_result has correct bits (in reverse order). A has parity bit in bit 7.
     jsr ps2_add_to_buffer
     jsr ps2_prepare_for_character ; reset T2 and SR counters
 
@@ -259,7 +280,7 @@ keymap:
     .byte "?cxde43?? vftr5?" ; 0x20-0x2F
     .byte "?nbhgy6???mju78?" ; 0x30-0x3F
     .byte "?,kio09??./l;p-?" ; 0x40-0x4F
-    .byte "??'?[=?????]?\\??" ; 0x50-0x5F
+    .byte "??'?[=?????]?\??" ; 0x50-0x5F
     .byte "?????????1?47???" ; 0x60-0x6F
     .byte "0.2568???+3-*9??" ; 0x70-0x7F
     .byte "????????????????" ; 0x80-0x8F
