@@ -35,9 +35,7 @@ input_buffer = $0200
 
 ;TODO: 
     ; handle extended codes (0xE0)
-    ; check for framing error in SR handler
-    ; check for framing error\parity in T2 handler
-    ; write framing error handler
+    ; check for parity in IRQ handler
     ; handle right-shift, backspace, delete keys
     ; send commands to keyboard (e.g. reset to set as PS2, set LEDs)
 
@@ -267,6 +265,18 @@ _add_shifted:       ; if adding char while shifted, add from shifted keymap
     jsr WRITE_BUFFER
     rts
 
+; 256-long nop loop
+; Modifies: flags 
+delay:
+	phx
+	ldx #0
+delayloop:
+	nop
+    dex
+    bne delayloop
+	plx
+	rts
+
 IRQ:
     pha
     phx
@@ -282,10 +292,30 @@ IRQ:
     ; if not, just return
     jmp _irq_done
 
+_ps2_framing_error:
+    ; Interrupt the device to resynchronise
+    lda PORTB
+    and #%10111111      ; pb6 low
+    sta PORTB
+    lda DDRB
+    tax
+    ora #%01000000      ; pb6 output
+    sta DDRB            ; clock low
+	jsr delay           ; at least 100us
+    stx DDRB            ; release clock
+
+	; Prepare for the next character
+	jsr ps2_prepare_for_character
+
+	lda #$ff
+    jsr ps2_add_to_buffer
+    jmp _irq_done
+
 _irq_ps2_sr:
     lda SR ; clear SR interrupt flag and read first 8 bits.
     ; A register now has first 8 bits (start bit 0 (in position 7, MSB), and 7 least significant data bits (in reverse order))
-    ; HERE: check for framing error - MSB needs to be 0. use bmi instruction
+    ;check for framing error - MSB needs to be 0 (start bit)
+    bmi _ps2_framing_error
     sta ps2_read_result
     jmp _irq_done
 
@@ -294,7 +324,8 @@ _irq_ps2_t2:
     lda SR  ; read next 3 bits.
     ; A register now has last 3 bits (code MSB in position 2, parity bit in position 1, stop bit 1 in position 0)
     ror     ; rotate right 3 times to put MSB in carry bit, parity in bit 7, stop bit in bit 6
-    ; HERE: check for framing error - carry bit needs to be 1. use bcc instruction
+    ;heck for framing error - carry bit needs to be 1 (stop bit)
+    bcc _ps2_framing_error
     ror
     ror 
     rol ps2_read_result ; put MSB in position 0 of result byte, now contains full byte in reverse order
@@ -326,7 +357,7 @@ keymap_reversed:
     .byte "??i?d???????h?5?" ; 0xC0 - 0xCF
     .byte "??l?f?4?s?]?j?-?" ; 0xD0 - 0xDF
     .byte "????????????????" ; 0xE0 - 0xEF
-    .byte "????????????????" ; 0xF0 - 0xFF
+    .byte "???????????????X" ; 0xF0 - 0xFF
 
 shifted_keymap_reversed:
     .byte "??????????????)?" ; 0x00 - 0x0F
@@ -344,7 +375,7 @@ shifted_keymap_reversed:
     .byte "??I?D???????H?%?" ; 0xC0 - 0xCF
     .byte "??L?F?$?S?}?J?_?" ; 0xD0 - 0xDF
     .byte "????????????????" ; 0xE0 - 0xEF
-    .byte "????????????????" ; 0xF0 - 0xFF
+    .byte "???????????????X" ; 0xF0 - 0xFF
 
 ; sys vectors
 ;-------------
