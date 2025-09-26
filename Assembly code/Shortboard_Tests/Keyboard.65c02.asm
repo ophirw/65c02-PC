@@ -26,6 +26,7 @@ IFR_SET = %10000000
 write_ptr = $0000
 read_ptr = $0001
 ps2_read_result = $0002
+kboard_flags = $0003  ; 7: break code recieved, 6: shift held
 input_buffer = $0200
 
     .org $8000
@@ -33,13 +34,11 @@ input_buffer = $0200
     .org $C000
 
 ;TODO: 
-    ; ignore break codes (0xF0)
     ; handle extended codes (0xE0)
     ; check for framing error in SR handler
     ; check for framing error\parity in T2 handler
     ; write framing error handler
-    ; instead of reversing bits in add_to_buffer, change keymap to match bit order
-    ; handle shift, enter, backspace, delete keys
+    ; handle right-shift, backspace, delete keys
     ; send commands to keyboard (e.g. reset to set as PS2, set LEDs)
 
 
@@ -118,15 +117,37 @@ lcd_instruction:
 ; sends the character in the A register to the LCD
 ; Modifies: flags
 CHR_OUT:
-    pha
     jsr lcd_wait
+    cmp #$0A ; is it a line-feed?
+    beq _line_feed
+    cmp #$09 ; is it tab?
+    beq _tab
     sta PORTA
+    pha
     lda #RS        ; set RS pin
     sta PORTB
     lda #(RS | E)  ; set E pin
     sta PORTB
     lda #RS        ; clear E pin
     sta PORTB
+    pla
+    rts
+_line_feed:
+    pha
+    lda #%11000000 ; change LF to new-line lcd instruction
+    jsr lcd_instruction
+    pla
+    rts
+_tab:
+    pha
+    phx
+    lda #" "
+    ldx #4
+_tab_loop:
+    jsr CHR_OUT
+    dex
+    bne _tab_loop
+    plx
     pla
     rts
 
@@ -176,24 +197,26 @@ load_t2:
 ; Initializes PS/2 interface by setting up SR and T2, enabling interrupts, and initializing buffer
 ; Modifies: flags, A
 ps2_init:
-    cli
     lda #%00101100
     sta ACR       ; set T2 count pulses on PB6, set SR to shift in under external clock on CB1. diasble all others
     jsr INIT_BUFFER
+    lda #0
+    sta kboard_flags
     jsr ps2_prepare_for_character
     lda #%01111111
     sta IER       ; disable all interrupts
     lda #(IFR_SET | IFR_SR | IFR_T2)
     sta IER       ; enable interrupts on SR and T2
+    cli
     rts
 
 ; reInitializes Shift register and timer 2 to prepare for receiving a character
 ; Modifies: flags, A
 ps2_prepare_for_character:
     ; ReStart SR
-	lda #$20 + $00
+	lda #%00100000
     sta ACR
-	lda #$20 + $0c
+	lda #%00101100
     sta ACR
 	lda SR
     ; set T2 to count 11 bits
@@ -201,26 +224,53 @@ ps2_prepare_for_character:
     jsr load_t2
     rts
     
-; reverses bits in ps2_read_result and adds to input buffer
+; adds contents of ps2_read_result to input buffer, and hanles kb_flags like shift and ignoring break codes
 ; Modifies: flags, A, X
 ps2_add_to_buffer:
-    lda ps2_read_result
-    ldx #8          ; Set X to 8 (number of bits)
-    lsr             ; Shift right to start with LSB
-    sta ps2_read_result ; Store the reversed bits temporarily
-_reverse_loop:
-    rol ps2_read_result ; Rotate left into the result
-    lsr             ; Shift right to get the next bit
-    dex             ; Decrement bit counter
-    bne _reverse_loop ; Repeat until all bits are reversed
-    ldx ps2_read_result ; Load the reversed bits into X
-    lda keymap, X
+    ldx ps2_read_result
+    lda kboard_flags
+    ; is break flag set?
+    bmi _break_code_set
+    ; is the char a break code?
+    cpx #$0F  ; ignore 0xF0 break code
+    beq _break_code
+    ; is the char the shift key?
+    cpx #$48  ; check for shift key 0x12 reversed
+    beq _shift_pressed
+    ; is the shift flag set?
+    bit kboard_flags
+    bvs _add_shifted
+    ; if no break or shift flag set, and not a break code or shift code, add char
+    lda keymap_reversed, X
+    jsr WRITE_BUFFER
+    rts
+_break_code_set:
+    and #%01111111  ; clear the break kb flag
+    sta kboard_flags
+    cpx #$48        ; is the char the shift key? code 0x12 reversed
+    beq _shift_released
+    rts             ; if realesed key is a char, ignore
+_shift_released:    ; clear shift kb flag
+    and #%10111111
+    sta kboard_flags
+    rts
+_break_code:        ; set break kb flag
+    ora #%10000000
+    sta kboard_flags
+    rts
+_shift_pressed:     ; set shift kb flag
+    ora #%01000000
+    sta kboard_flags
+    rts 
+_add_shifted:       ; if adding char while shifted, add from shifted keymap
+    lda shifted_keymap_reversed, X
     jsr WRITE_BUFFER
     rts
 
-
 IRQ:
     pha
+    phx
+
     ; check if PS/2 related interrupt
     lda IFR
     and #(IFR_SR | IFR_T2)
@@ -228,11 +278,8 @@ IRQ:
     beq _irq_ps2_t2
     cmp #IFR_SR
     beq _irq_ps2_sr
-    ; if not, just return
     
-    lda #"^"
-    jsr CHR_OUT ; debug
-
+    ; if not, just return
     jmp _irq_done
 
 _irq_ps2_sr:
@@ -240,24 +287,12 @@ _irq_ps2_sr:
     ; A register now has first 8 bits (start bit 0 (in position 7, MSB), and 7 least significant data bits (in reverse order))
     ; HERE: check for framing error - MSB needs to be 0. use bmi instruction
     sta ps2_read_result
-
-    jsr CHR_OUT ; debug
-    lda #"S"
-    jsr CHR_OUT
-
     jmp _irq_done
 
 _irq_ps2_t2:
     bit T2CL; clear t2 interrupt flag
     lda SR  ; read next 3 bits.
     ; A register now has last 3 bits (code MSB in position 2, parity bit in position 1, stop bit 1 in position 0)
-    
-    jsr CHR_OUT ; debug
-    pha
-    lda #"T"
-    jsr CHR_OUT
-    pla
-
     ror     ; rotate right 3 times to put MSB in carry bit, parity in bit 7, stop bit in bit 6
     ; HERE: check for framing error - carry bit needs to be 1. use bcc instruction
     ror
@@ -268,29 +303,48 @@ _irq_ps2_t2:
     jsr ps2_prepare_for_character ; reset T2 and SR counters
 
 _irq_done:
+    plx
     pla
     rti
 
 NMI:
     rti
 
-keymap:
-    .byte "??????????????`?" ; 0x00-0x0F
-    .byte "?????q1???zsaw2?" ; 0x10-0x1F
-    .byte "?cxde43?? vftr5?" ; 0x20-0x2F
-    .byte "?nbhgy6???mju78?" ; 0x30-0x3F
-    .byte "?,kio09??./l;p-?" ; 0x40-0x4F
-    .byte "??'?[=?????]?\??" ; 0x50-0x5F
-    .byte "?????????1?47???" ; 0x60-0x6F
-    .byte "0.2568???+3-*9??" ; 0x70-0x7F
-    .byte "????????????????" ; 0x80-0x8F
-    .byte "????????????????" ; 0x90-0x9F
-    .byte "????????????????" ; 0xA0-0xAF
-    .byte "????????????????" ; 0xB0-0xBF
-    .byte "????????????????" ; 0xC0-0xCF
-    .byte "????????????????" ; 0xD0-0xDF
-    .byte "????????????????" ; 0xE0-0xEF
-    .byte "????????????????" ; 0xF0-0xFF
+keymap_reversed:
+    .byte "??????????????0?" ; 0x00 - 0x0F
+    .byte "????????????????" ; 0x10 - 0x1F
+    .byte "??o?e?????[?g?6?" ; 0x20 - 0x2F
+    .byte "??;?t?7?a???u?*?" ; 0x30 - 0x3F
+    .byte "??k?x?????'?b?2?" ; 0x40 - 0x4F
+    .byte "??/?v???z?", 0x0A, "?m?3?" ; 0x50 - 0x5F
+    .byte "??9?3???1???6???" ; 0x60 - 0x6F
+    .byte "`?-?5???2???8???" ; 0x70 - 0x7F
+    .byte "??,?c???????n?.?" ; 0x80 - 0x8F
+    .byte "??.? ?1???????+?" ; 0x90 - 0x9F
+    .byte "??0?4???q?=?y?8?" ; 0xA0 - 0xAF
+    .byte 0x09, "?p?r???w?\?7?9?" ; 0xB0 - 0xBF
+    .byte "??i?d???????h?5?" ; 0xC0 - 0xCF
+    .byte "??l?f?4?s?]?j?-?" ; 0xD0 - 0xDF
+    .byte "????????????????" ; 0xE0 - 0xEF
+    .byte "????????????????" ; 0xF0 - 0xFF
+
+shifted_keymap_reversed:
+    .byte "??????????????)?" ; 0x00 - 0x0F
+    .byte "????????????????" ; 0x10 - 0x1F
+    .byte "??O?E?????{?G?^?" ; 0x20 - 0x2F
+    .byte "??:?T?&?A???U?*?" ; 0x30 - 0x3F
+    .byte "??K?X?????", 0x22, "?B?@?" ; 0x40 - 0x4F
+    .byte "????V???Z?", 0x0A, "?M?#?" ; 0x50 - 0x5F
+    .byte "??(?#???!???^???" ; 0x60 - 0x6F
+    .byte "~?_?%???@???*???" ; 0x70 - 0x7F
+    .byte "??<?C???????N?>?" ; 0x80 - 0x8F
+    .byte "??>? ?!???????+?" ; 0x90 - 0x9F
+    .byte "??)?$???Q?+?Y?*?" ; 0xA0 - 0xAF
+    .byte "??P?R???W?|?&?(?" ; 0xB0 - 0xBF
+    .byte "??I?D???????H?%?" ; 0xC0 - 0xCF
+    .byte "??L?F?$?S?}?J?_?" ; 0xD0 - 0xDF
+    .byte "????????????????" ; 0xE0 - 0xEF
+    .byte "????????????????" ; 0xF0 - 0xFF
 
 ; sys vectors
 ;-------------
