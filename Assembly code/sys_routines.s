@@ -1,3 +1,5 @@
+;TODO: check for parity in PS2 IRQ handler
+
 reset:
     lda #%00011111
     sta PCR      ; set CA2 output, CA1 input (need to be tied high), CB1 positive going edge. CB2 controlled by SR.

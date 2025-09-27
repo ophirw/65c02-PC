@@ -33,12 +33,6 @@ input_buffer = $0200
     nop
     .org $C000
 
-;TODO: 
-    ; handle extended codes (0xE0)
-    ; check for parity in IRQ handler
-    ; handle right-shift, escape, home, end, arrows, delete keys
-    ; send commands to keyboard (e.g. reset to set as PS2, set LEDs)
-
 
 reset:
     lda #%00011111
