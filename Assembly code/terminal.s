@@ -4,8 +4,8 @@
 .include "defines.s"
 
 ; TODO: add internal virtual state, with a moveable physical state ontop, redraw invalidated cells (this will add scrollability).
-; TODO: have the virtual and physical states resizeable, to accomodate different terminal harware (LCD, VGA, etc.)
-; TODO: change the call to CHR_OUT to instead call the bios which can decide what the hardware-bound code is.
+; TODO: have the virtual and physical states resizeable, to accomodate different terminal harware
+; TODO: change the call to CHR_OUT to instead call the bios
 ; TODO: handle moving cursor (arrows, enter, etc.) here and not in CHR_OUT.
 ; TODO: add escape sequences specific to each terminal (e.g. clear, home, tab)
 
