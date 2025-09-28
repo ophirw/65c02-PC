@@ -1,3 +1,7 @@
+; TODO: make the Line-feed overflow into scrolling
+; TODO: implement escape sequences (home, arrows, clear, etc.)
+; TODO: move all non-hardware specific code to bios or display driver
+
 ; initializes the LCD
 ; Modifies: flags, A
 lcd_init:
@@ -8,7 +12,8 @@ lcd_init:
     lda #%00000110      ; Write left-to-right. shift cursor. no display shift
     jsr lcd_instruction
     lda #1              ; clear display
-    jmp lcd_instruction
+    jsr lcd_instruction
+    rts
 
 ; waits for LCD busy flag to clear
 ; Modifies: flags

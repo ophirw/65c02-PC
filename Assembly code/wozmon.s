@@ -3,24 +3,14 @@
 ;  The WOZ Monitor for the Apple 1
 ;  Written by Steve Wozniak 1976
 ;  Adapted for the OW6502 by Ophir Wesley 2025
-;
+;   
+;  TODO: use my input_buf instead of the IN array
 ;-------------------------------------------------------------------------
 .setcpu "65c02"
-.segment "WOZMON"
 .include "defines.s"
 
-;-------------------------------------------------------------------------
-;  Constants
-;-------------------------------------------------------------------------
-
-BS              .EQ     $DF             Backspace key, arrow left key
-CR              .EQ     $8D             Carriage Return
-ESC             .EQ     $9B             ESC key
-PROMPT          .EQ     '\'             Prompt character
-
-;-------------------------------------------------------------------------
-
-WOZMON:
+.segment "WOZMON"
+WOZMON:     LDY #$7F
 
 ;-------------------------------------------------------------------------
 ; The GETLINE process
@@ -48,17 +38,20 @@ BACKSPACE:
     BMI     GETLINE         ;Oops, line's empty, reinitialize
 
 NEXTCHAR:        
-    LDA     KBDCR           ;Wait for key press
-    BPL     NEXTCHAR        ;No key yet!
-    LDA     KBD             ;Load character. B7 should be '1'
-    STA     IN,Y            ;Add to text buffer
-    JSR     ECHO            ;Display character
+    SEI                     ;Disable interrupts to avoid a key being pressed while checking
+    LDA     write_ptr       ;Wait for key press
+    CMP     read_ptr
+    CLI                     ;re-enable interrupts
+    BEQ     NEXTCHAR        ;No key yet! read_ptr==write_ptr
+    JSR     READ_BUFFER     ;load the new char
+    STA     IN,Y            ;save char in the IN array
+    JSR     CHR_OUT         ;Display character
     CMP     #CR
     BNE     NOTCR           ;It's not CR!
 
 ; Line received, now let's parse it
 
-    LDY     #-1             ;Reset text index
+    LDY     #$ff             ;Reset text index
     LDA     #0              ;Default mode is XAM
     TAX                     ;X=0
 
@@ -75,12 +68,12 @@ NEXTITEM:
     LDA     IN,Y            ;Get character
     CMP     #CR
     BEQ     GETLINE         ;We're done if it's CR!
-    CMP     #"."
+    CMP     #'.'
     BCC     BLSKIP          ;Ignore everything below "."!
     BEQ     SETMODE         ;Set BLOCK XAM mode ("." = $AE)
-    CMP     #":"
+    CMP     #':'
     BEQ     SETSTOR         ;Set STOR mode! $BA will become $7B
-    CMP     #"R"
+    CMP     #':'
     BEQ     RUN             ;Run the program! Forget the rest
     STX     L               ;Clear input value (X=0)
     STX     H
@@ -162,11 +155,11 @@ NXTPRNT:
     JSR     PRBYTE
     LDA     XAML            ;Output low-order byte of address
     JSR     PRBYTE
-    LDA     #":"            ;Print colon
+    LDA     #':'            ;Print colon
     JSR     ECHO
 
 PRDATA:
-    LDA     #" "            ;Print space
+    LDA     #' '            ;Print space
     JSR     ECHO
     LDA     (XAML,X)        ;Get data from address (X=0)
     JSR     PRBYTE          ;Output it in hex format
@@ -184,7 +177,7 @@ XAMNEXT:
 
 MOD8CHK:
     LDA     XAML            ;If address MOD 8 = 0 start new line
-    AND     #%0000.0111
+    AND     #%00000111
     BPL     NXTPRNT         ;Always taken.
 
 ;-------------------------------------------------------------------------
@@ -207,9 +200,9 @@ PRBYTE:
 ;-------------------------------------------------------------------------
 
 PRHEX:
-    AND     #%0000.1111     ;Mask LSD for hex print
-    ORA     #"0"            ;Add "0"
-    CMP     #"9"+1          ;Is it a decimal digit?
+    AND     #%00001111      ;Mask LSD for hex print
+    ORA     #'0'            ;Add "0"
+    CMP     #'9'+1          ;Is it a decimal digit?
     BCC     ECHO            ;Yes! output it
     ADC     #6              ;Add offset for letter A-F
 
@@ -228,5 +221,4 @@ ECHO:
 .include "drivers/lcd.s"
 .include "drivers/ps2.s"
 
-.segment "SYS_ROUT"
 .include "sys_routines.s"

@@ -3,11 +3,16 @@
 .segment "CODE"
 .include "defines.s"
 
-; TODO: add internal virtual state, with a moveable physical state ontop, redraw invalidated cells (this will add scrollability).
-; TODO: have the virtual and physical states resizeable, to accomodate different terminal harware
-; TODO: change the call to CHR_OUT to instead call the bios
-; TODO: handle moving cursor (arrows, enter, etc.) here and not in CHR_OUT.
-; TODO: add escape sequences specific to each terminal (e.g. clear, home, tab)
+; TODO: when adapting to VGA terminal, write general display driver that will:
+;   -> add internal virtual state, with a moveable physical state ontop, redraw invalidated cells (this will add scrollability).
+;   -> keep track of cursor and handle arrows, enter, etc.
+;   -> handle implementing recieved escape sequences 
+;       (e.g. home key pressed -> ps2 driver adds home escape sequence to buffer -> when display driver called to print escape sequence, instead move cursor)
+; TODO: wrap diaplay, lcd and vga drivers in bios that knows which driver to call and is opaque to other programs.
+;   -> program calls CHR_OUT in bios. bios calls display driver to update internal state and mark invalidated cells. 
+;       then bios calls specific hardware driver to redraw invalidated cells. 
+;   -> this flow allows arbitrary writing location, scrollability, obfuscation of hardware to user programs 
+;       and modularity in cases where the hardware routine is blocking and costly to only redraw the screen when there is time to do so.
 
 terminal_loop:
     sei

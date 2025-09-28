@@ -1,7 +1,7 @@
 ; TODO: handle extended codes (0xE0)
 ; TODO: handle right-shift, escape, delete keys
 ; TODO: send commands to keyboard (e.g. reset to set as PS2, set LEDs)
-; TODO: handle non-ascii keys (e.g. ctrl, arrows, home, end) differently
+; TODO: handle non-ascii keys (e.g. ctrl, arrows, home, end) using escape sequences
 
 ; Initializes PS/2 interface by setting up SR and T2, enabling interrupts, and initializing buffer
 ; Modifies: flags, A
@@ -30,7 +30,8 @@ ps2_prepare_for_character:
 	lda SR
     ; set T2 to count 11 bits
     lda #10     
-    jmp load_t2
+    jsr load_t2
+    rts
     
 ; adds contents of ps2_read_result to input buffer, and hanles kb_flags like shift and ignoring break codes
 ; Modifies: flags, A, X
@@ -50,7 +51,8 @@ ps2_add_to_buffer:
     bvs _add_shifted
     ; if no break or shift flag set, and not a break code or shift code, add char
     lda keymap_reversed, X
-    jmp WRITE_BUFFER
+    jsr WRITE_BUFFER
+    rts
 _break_code_set:
     and #%01111111  ; clear the break kb flag
     sta kboard_flags
@@ -71,8 +73,9 @@ _shift_pressed:     ; set shift kb flag
     rts 
 _add_shifted:       ; if adding char while shifted, add from shifted keymap
     lda shifted_keymap_reversed, X
-    jmp WRITE_BUFFER
-    
+    jsr WRITE_BUFFER
+    rts
+
 ; Loads timer 2 with the value in A (low byte) and 0 (high byte)
 ; Modifies: flags
 load_t2:
@@ -100,7 +103,7 @@ keymap_reversed:
     .byte "??;?t?7?a???u?*?" ; 0x30 - 0x3F
     .byte "??k?x?????'?b?2?" ; 0x40 - 0x4F
     .byte "??/?v???z?", $0A, "?m?3?" ; 0x50 - 0x5F
-    .byte "??9?3?", $08, "?1???6???" ; 0x60 - 0x6F
+    .byte "??9?3?", $08, "?1???6?", $1B, "?" ; 0x60 - 0x6F
     .byte "`?-?5???2???8???" ; 0x70 - 0x7F
     .byte "??,?c???????n?.?" ; 0x80 - 0x8F
     .byte "??.? ?1???????+?" ; 0x90 - 0x9F
@@ -118,7 +121,7 @@ shifted_keymap_reversed:
     .byte "??:?T?&?A???U?*?" ; 0x30 - 0x3F
     .byte "??K?X?????", $22, "?B?@?" ; 0x40 - 0x4F
     .byte "????V???Z?", $0A, "?M?#?" ; 0x50 - 0x5F
-    .byte "??(?#?", $08, "?!???^???" ; 0x60 - 0x6F
+    .byte "??(?#?", $08, "?!???^?", $1B, "?" ; 0x60 - 0x6F
     .byte "~?_?%???@???*???" ; 0x70 - 0x7F
     .byte "??<?C???????N?>?" ; 0x80 - 0x8F
     .byte "??>? ?!???????+?" ; 0x90 - 0x9F

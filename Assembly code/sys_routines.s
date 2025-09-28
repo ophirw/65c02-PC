@@ -1,4 +1,5 @@
 ;TODO: check for parity in PS2 IRQ handler
+.segment "SYS_ROUT"
 
 reset:
     cld
@@ -12,6 +13,9 @@ reset:
     jsr lcd_init
     jsr ps2_init
     jmp WOZMON
+    
+halt:
+    jmp halt
 
 IRQ:
     pha
