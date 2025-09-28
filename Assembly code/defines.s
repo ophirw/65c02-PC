@@ -23,8 +23,19 @@ IFR_SET = %10000000
 
 ; variables
 ;---------
-write_ptr = $0000
-read_ptr = $0001
-ps2_read_result = $0002
-kboard_flags = $0003  ; 7: break code recieved, 6: shift held
+write_ptr = $00
+read_ptr = $01
+ps2_read_result = $02
+kboard_flags = $03  ; 7: break code recieved, 6: shift held
+
+; wozmon variables
+XAML            .EQ     $24             ;Last "opened" location Low
+XAMH            .EQ     $25             ;Last "opened" location High
+STL             .EQ     $26             ;Store address Low
+STH             .EQ     $27             ;Store address High
+L               .EQ     $28             ;Hex value parsing Low
+H               .EQ     $29             ;Hex value parsing High
+YSAV            .EQ     $2A             ;Used to see if hex value is given
+MODE            .EQ     $2B             ;$00=XAM, $7F=STOR, $AE=BLOCK XAM
+
 input_buffer = $0200

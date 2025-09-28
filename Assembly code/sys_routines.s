@@ -1,6 +1,7 @@
 ;TODO: check for parity in PS2 IRQ handler
 
 reset:
+    cld
     lda #%00011111
     sta PCR      ; set CA2 output, CA1 input (need to be tied high), CB1 positive going edge. CB2 controlled by SR.
     lda #%11111111
@@ -10,7 +11,7 @@ reset:
 
     jsr lcd_init
     jsr ps2_init
-    jmp terminal_loop
+    jmp WOZMON
 
 IRQ:
     pha
