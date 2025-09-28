@@ -30,8 +30,7 @@ ps2_prepare_for_character:
 	lda SR
     ; set T2 to count 11 bits
     lda #10     
-    jsr load_t2
-    rts
+    jmp load_t2
     
 ; adds contents of ps2_read_result to input buffer, and hanles kb_flags like shift and ignoring break codes
 ; Modifies: flags, A, X
@@ -51,8 +50,7 @@ ps2_add_to_buffer:
     bvs _add_shifted
     ; if no break or shift flag set, and not a break code or shift code, add char
     lda keymap_reversed, X
-    jsr WRITE_BUFFER
-    rts
+    jmp WRITE_BUFFER
 _break_code_set:
     and #%01111111  ; clear the break kb flag
     sta kboard_flags
@@ -73,9 +71,8 @@ _shift_pressed:     ; set shift kb flag
     rts 
 _add_shifted:       ; if adding char while shifted, add from shifted keymap
     lda shifted_keymap_reversed, X
-    jsr WRITE_BUFFER
-    rts
-
+    jmp WRITE_BUFFER
+    
 ; Loads timer 2 with the value in A (low byte) and 0 (high byte)
 ; Modifies: flags
 load_t2:

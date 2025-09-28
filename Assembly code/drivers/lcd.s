@@ -8,8 +8,7 @@ lcd_init:
     lda #%00000110      ; Write left-to-right. shift cursor. no display shift
     jsr lcd_instruction
     lda #1              ; clear display
-    jsr lcd_instruction
-    rts
+    jmp lcd_instruction
 
 ; waits for LCD busy flag to clear
 ; Modifies: flags
