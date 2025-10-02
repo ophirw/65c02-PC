@@ -1,7 +1,9 @@
+; TODO: implement "RTS trick" to optimize code
+
 ; TODO: handle extended codes (0xE0)
 ; TODO: handle right-shift, escape, delete keys
 ; TODO: send commands to keyboard (e.g. reset to set as PS2, set LEDs)
-; TODO: handle non-ascii keys (e.g. ctrl, arrows, home, end) using escape sequences
+; TODO: handle non-ascii keys (e.g. ctrl, arrows, home, end) using escape sequences. make it ANSI compatible?
 
 ; Initializes PS/2 interface by setting up SR and T2, enabling interrupts, and initializing buffer
 ; Modifies: flags, A

@@ -1,7 +1,7 @@
 .setcpu "65c02"
 
 .segment "CODE"
-.include "defines.s"
+.include "../defines.s"
 
 ; TODO: when adapting to VGA terminal, write general display driver that will:
 ;   -> add internal virtual state, with a moveable physical state ontop, redraw invalidated cells (this will add scrollability).
@@ -14,6 +14,7 @@
 ;   -> this flow allows arbitrary writing location, scrollability, obfuscation of hardware to user programs 
 ;       and modularity in cases where the hardware routine is blocking and costly to only redraw the screen when there is time to do so.
 
+code_start:
 terminal_loop:
     sei
     lda write_ptr
@@ -24,7 +25,9 @@ terminal_loop:
     jsr CHR_OUT
     jmp terminal_loop
 
-.include "drivers/input_buf.s"
-.include "drivers/lcd.s"
-.include "drivers/ps2.s"
-.include "sys_routines.s"
+.segment "DRIVERS"
+.include "../drivers/input_buf.s"
+.include "../drivers/lcd.s"
+.include "../drivers/ps2.s"
+
+.include "../sys_routines.s"

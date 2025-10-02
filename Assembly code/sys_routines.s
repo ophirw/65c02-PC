@@ -12,7 +12,7 @@ reset:
 
     jsr lcd_init
     jsr ps2_init
-    jmp WOZMON
+    jmp code_start
     
 halt:
     jmp halt

@@ -7,9 +7,10 @@
 ;  TODO: use my input_buf instead of the IN array
 ;-------------------------------------------------------------------------
 .setcpu "65c02"
-.include "defines.s"
+.include "../defines.s"
 
 .segment "WOZMON"
+code_start:
 WOZMON:     LDY #$7F
 
 ;-------------------------------------------------------------------------
@@ -217,8 +218,8 @@ ECHO:
 
 
 .segment "DRIVERS"
-.include "drivers/input_buf.s"
-.include "drivers/lcd.s"
-.include "drivers/ps2.s"
+.include "../drivers/input_buf.s"
+.include "../drivers/lcd.s"
+.include "../drivers/ps2.s"
 
-.include "sys_routines.s"
+.include "../sys_routines.s"
